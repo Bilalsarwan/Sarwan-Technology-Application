@@ -1,0 +1,6 @@
+{
+  "name": "Sarwan Technology Billing & Business Management",
+  "description": "Professional web-based billing and business management system for Sarwan Technology with invoices, cash payments, customer history, expenses, and A4 PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

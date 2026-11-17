@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/sarwan-logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sarwan Technology Billing &amp; Business Management</title>
+    <meta name="description" content="Professional web-based billing and business management system for Sarwan Technology with invoices, cash payments, customer history, expenses, and A4 PDF export." />
+    <meta property="og:title" content="Sarwan Technology Billing &amp; Business Management" />
+    <meta property="og:description" content="Professional web-based billing and business management system for Sarwan Technology with invoices, cash payments, customer history, expenses, and A4 PDF export." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&family=Lato:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&family=Roboto:ital,wght@0,400;0,500;0,700;1,400;1,700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var session = localStorage.getItem('sarwan_auth_session_v1');
+          var themeId = null;
+          if (session) {
+            var parsed = JSON.parse(session);
+            if (parsed && parsed.userId) {
+              themeId = localStorage.getItem('sarwan_theme_user_' + parsed.userId);
+            }
+          }
+          if (!themeId) {
+            themeId = localStorage.getItem('sarwan_theme_global_default');
+          }
+          if (!themeId) {
+            themeId = localStorage.getItem('sarwan_theme_guest') || localStorage.getItem('sarwan_user_theme');
+          }
+          if (!themeId) {
+            themeId = 'sarwan_classic_light';
+          }
+          var isDark = themeId === 'sarwan_dark' || themeId === 'dark_midnight' || themeId === 'high_contrast' || themeId === 'dark';
+          document.documentElement.setAttribute('data-theme', themeId);
+          document.documentElement.setAttribute('data-mode', isDark ? 'dark' : 'light');
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="invoice-print-root" aria-hidden="true"></div>
+    <div id="receipt-print-root" aria-hidden="true"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

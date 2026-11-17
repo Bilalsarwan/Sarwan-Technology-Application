@@ -1,0 +1,6 @@
+{
+  "projectId": "your-firebase-project-id",
+  "apiKey": "your-firebase-api-key",
+  "authDomain": "your-firebase-project-id.firebaseapp.com",
+  "firestoreDatabaseId": "(default)"
+}

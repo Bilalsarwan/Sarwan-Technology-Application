@@ -1,0 +1,282 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role, credentials, and permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID" },
+        "name": { "type": "string", "description": "Full name", "maxLength": 150 },
+        "username": { "type": "string", "description": "Username for custom login", "maxLength": 50 },
+        "email": { "type": "string", "format": "email", "description": "Registered email", "maxLength": 150 },
+        "phone": { "type": "string", "description": "Contact phone number", "maxLength": 30 },
+        "role": { "type": "string", "enum": ["super_admin", "invoice_manager", "payment_collector", "customer"], "description": "System role" },
+        "status": { "type": "string", "enum": ["active", "inactive", "suspended", "pending", "rejected"], "description": "Account status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "name", "role", "status", "createdAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Client profile, contact details, balance, and account link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique customer document ID" },
+        "customerCode": { "type": "string", "description": "Sequential Customer ID like ST-CUST-1001", "maxLength": 50 },
+        "customerId": { "type": "string", "description": "Sequential Customer ID like ST-CUST-1001", "maxLength": 50 },
+        "customerType": { "type": "string", "enum": ["Individual", "Business"], "description": "Customer type" },
+        "name": { "type": "string", "description": "Customer name", "maxLength": 150 },
+        "phone": { "type": "string", "description": "Phone number", "maxLength": 30 },
+        "alternatePhone": { "type": "string", "description": "Alternate phone number", "maxLength": 30 },
+        "email": { "type": "string", "format": "email", "description": "Email address", "maxLength": 150 },
+        "companyName": { "type": "string", "description": "Company name", "maxLength": 150 },
+        "address": { "type": "string", "description": "Physical address", "maxLength": 300 },
+        "city": { "type": "string", "description": "City", "maxLength": 100 },
+        "province": { "type": "string", "description": "Province", "maxLength": 100 },
+        "notes": { "type": "string", "description": "Customer notes", "maxLength": 1000 },
+        "note": { "type": "string", "description": "Customer notes", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Active", "Inactive", "Blocked"], "description": "Customer status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["id", "name", "phone", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Sales invoice with 20 items, pricing, totals, and payment status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique invoice ID" },
+        "billNumber": { "type": "string", "description": "Invoice number like ST-1060", "maxLength": 50 },
+        "customerId": { "type": "string", "description": "Target customer ID" },
+        "date": { "type": "string", "description": "Invoice date YYYY-MM-DD" },
+        "totalAmount": { "type": "number", "description": "Total invoice amount in AFN" },
+        "status": { "type": "string", "enum": ["Paid", "Partially Paid", "Unpaid", "Void"], "description": "Payment status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "billNumber", "customerId", "date", "totalAmount", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Cash payment record against invoice or customer balance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique payment ID" },
+        "invoiceId": { "type": "string", "description": "Linked invoice ID" },
+        "billNumber": { "type": "string", "description": "Invoice bill number" },
+        "customerId": { "type": "string", "description": "Customer ID" },
+        "customerName": { "type": "string", "description": "Customer name" },
+        "amount": { "type": "number", "description": "Paid amount in AFN" },
+        "date": { "type": "string", "description": "Payment date YYYY-MM-DD" },
+        "method": { "type": "string", "enum": ["CASH"], "description": "Payment method" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "invoiceId", "customerId", "amount", "date", "method", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Business expense entry with tiered approval status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique expense ID" },
+        "title": { "type": "string", "description": "Expense title", "maxLength": 200 },
+        "amount": { "type": "number", "description": "Expense amount in AFN" },
+        "date": { "type": "string", "description": "Expense date YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["draft", "pending_manager", "pending_admin", "approved", "executed", "rejected"], "description": "Approval status" },
+        "requestedBy": { "type": "string", "description": "Requester ID" },
+        "invoiceId": { "type": "string", "description": "Linked invoice ID if expense belongs to an invoice" },
+        "billNumber": { "type": "string", "description": "Linked invoice bill number" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "title", "amount", "date", "status", "requestedBy", "createdAt"]
+    },
+    "Setting": {
+      "title": "Business Setting",
+      "description": "Business settings, company profile, and invoice/receipt layout preferences",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "description": "Company name", "maxLength": 200 },
+        "phone": { "type": "string", "description": "Company phone", "maxLength": 50 },
+        "email": { "type": "string", "format": "email", "description": "Company email", "maxLength": 150 },
+        "currency": { "type": "string", "description": "Default currency", "maxLength": 10 }
+      },
+      "required": ["companyName", "currency"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Immutable record of critical operational actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique log ID" },
+        "action": { "type": "string", "description": "Action name" },
+        "userId": { "type": "string", "description": "Operator user ID" },
+        "userName": { "type": "string", "description": "Operator full name" },
+        "entityType": { "type": "string", "description": "Target entity type" },
+        "entityId": { "type": "string", "description": "Target entity ID" },
+        "dateTime": { "type": "string", "description": "ISO timestamp" },
+        "summary": { "type": "string", "description": "Human readable action summary" }
+      },
+      "required": ["id", "action", "userId", "userName", "entityType", "entityId", "dateTime", "summary"]
+    },
+    "AuditDeletionLog": {
+      "title": "Audit Deletion Log",
+      "description": "Protected immutable accountability record of audit deletion operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique record ID" },
+        "scope": { "type": "string", "enum": ["single", "selected", "all"] },
+        "initiatedBy": { "type": "string", "description": "User ID of operator" },
+        "timestamp": { "type": "string", "description": "ISO timestamp" },
+        "requestedCount": { "type": "number", "description": "Requested count" },
+        "deletedCount": { "type": "number", "description": "Deleted count" },
+        "outcome": { "type": "string", "description": "Result status" }
+      },
+      "required": ["id", "scope", "initiatedBy", "timestamp", "requestedCount", "deletedCount", "outcome"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app system notification for staff or customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Notification ID" },
+        "target": { "type": "string", "description": "Audience target or specific user ID" },
+        "userId": { "type": "string", "description": "Intended recipient user identifier" },
+        "recipientId": { "type": "string", "description": "Target recipient identifier" },
+        "title": { "type": "string", "description": "Notification title", "maxLength": 200 },
+        "message": { "type": "string", "description": "Notification body", "maxLength": 1000 },
+        "isRead": { "type": "boolean", "description": "Read status flag" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "deletedBy": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "User IDs who have deleted this notification for their account"
+        }
+      },
+      "required": ["id", "target", "title", "message", "isRead", "createdAt"]
+    },
+    "CustomerRequest": {
+      "title": "Customer Request",
+      "description": "Service request or quotation inquiry submitted by customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Request ID" },
+        "customerId": { "type": "string", "description": "Customer ID" },
+        "customerName": { "type": "string", "description": "Customer name" },
+        "title": { "type": "string", "description": "Request subject", "maxLength": 250 },
+        "description": { "type": "string", "description": "Request details", "maxLength": 3000 },
+        "status": { "type": "string", "enum": ["New", "In Review", "Quoted", "Invoice Created", "Completed", "Cancelled"], "description": "Request status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "customerId", "customerName", "title", "status", "createdAt"]
+    },
+    "Project": {
+      "title": "Showcase Project",
+      "description": "Completed installation showcase project with media gallery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Project ID" },
+        "title": { "type": "string", "description": "Project title", "maxLength": 200 },
+        "description": { "type": "string", "description": "Project description", "maxLength": 3000 },
+        "category": { "type": "string", "description": "Project category", "maxLength": 100 },
+        "isPublished": { "type": "boolean", "description": "Public visibility flag" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "title", "description", "category", "isPublished", "createdAt"]
+    },
+    "ProfitRemittanceRequest": {
+      "title": "Profit Remittance Request",
+      "description": "Request by Invoice Manager to remit available invoice net profit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique request ID" },
+        "invoiceId": { "type": "string", "description": "Linked invoice ID" },
+        "billNumber": { "type": "string", "description": "Linked invoice bill number", "maxLength": 50 },
+        "managerId": { "type": "string", "description": "Requesting manager ID" },
+        "managerName": { "type": "string", "description": "Requesting manager name", "maxLength": 150 },
+        "managerRole": { "type": "string", "description": "Manager role" },
+        "requestedAmount": { "type": "number", "description": "Requested profit remittance amount in AFN" },
+        "currency": { "type": "string", "enum": ["AFN"], "description": "Currency code" },
+        "requestDate": { "type": "string", "description": "Request date YYYY-MM-DD" },
+        "note": { "type": "string", "description": "Optional manager request note", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "cancelled", "remitted"], "description": "Workflow status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["id", "invoiceId", "billNumber", "managerId", "managerName", "requestedAmount", "currency", "requestDate", "status", "createdAt"]
+    },
+    "ProfitRemittanceReceipt": {
+      "title": "Profit Remittance Receipt",
+      "description": "Immutable append-only ledger record of actual profit receipt recorded by Super Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique receipt ID" },
+        "requestId": { "type": "string", "description": "Linked remittance request ID" },
+        "invoiceId": { "type": "string", "description": "Linked invoice ID" },
+        "billNumber": { "type": "string", "description": "Linked invoice bill number", "maxLength": 50 },
+        "amount": { "type": "number", "description": "Actual received profit amount in AFN" },
+        "currency": { "type": "string", "enum": ["AFN"], "description": "Currency code" },
+        "receiptDate": { "type": "string", "description": "Receipt date YYYY-MM-DD" },
+        "receivedBy": { "type": "string", "description": "Receiving Super Admin ID" },
+        "receivedByName": { "type": "string", "description": "Receiving Super Admin name", "maxLength": 150 },
+        "receivedByRole": { "type": "string", "description": "Receiving user role" },
+        "referenceNumber": { "type": "string", "description": "Payment/handover reference note", "maxLength": 100 },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "requestId", "invoiceId", "billNumber", "amount", "currency", "receiptDate", "receivedBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and credentials collection"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customer accounts and directory"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Sales invoices collection"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Cash payments collection"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Business expenses collection"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "System and company settings documents"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable operational audit logs"
+    },
+    "/auditDeletionLogs/{deletionId}": {
+      "schema": "AuditDeletionLog",
+      "description": "Protected immutable audit deletion accountability logs"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System notifications"
+    },
+    "/requests/{requestId}": {
+      "schema": "CustomerRequest",
+      "description": "Customer service and quote requests"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Showcase portfolio projects"
+    },
+    "/profitRemittanceRequests/{requestId}": {
+      "schema": "ProfitRemittanceRequest",
+      "description": "Invoice profit remittance requests collection"
+    },
+    "/profitRemittanceReceipts/{receiptId}": {
+      "schema": "ProfitRemittanceReceipt",
+      "description": "Immutable append-only ledger of actual profit remittance receipts"
+    }
+  }
+}

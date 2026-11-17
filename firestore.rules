@@ -1,0 +1,585 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ================= HELPER FUNCTIONS =================
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSystemService() {
+      return request.auth != null && (
+        (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.uid == 'system') ||
+        (request.auth.token.firebase.sign_in_provider == 'custom' && 'isSystemService' in request.auth.token && request.auth.token.isSystemService == true) ||
+        (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.email == 'system-service@auth.sarwan.tech')
+      );
+    }
+
+    function getUserData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    function isDesignatedAdminEmail(email) {
+      return email != null && (
+        email in [
+          'sarwanelectronic@gmail.com',
+          'sarwang048@gmail.com',
+          'admin@sarwantechnology.com',
+          'bilalsarwan7@gmail.com',
+          'bilalsarwan2@gmail.com',
+          'sarwancreative.af@gmail.com',
+          'bilalsarwan7@auth.sarwan.tech',
+          'bilal.sarwan@auth.sarwan.tech',
+          'u.st-user-0001@auth.sarwan.tech',
+          'u.st-u-5000@auth.sarwan.tech'
+        ] ||
+        email.lower() in [
+          'sarwanelectronic@gmail.com',
+          'sarwang048@gmail.com',
+          'admin@sarwantechnology.com',
+          'bilalsarwan7@gmail.com',
+          'bilalsarwan2@gmail.com',
+          'sarwancreative.af@gmail.com',
+          'bilalsarwan7@auth.sarwan.tech',
+          'bilal.sarwan@auth.sarwan.tech',
+          'u.st-user-0001@auth.sarwan.tech',
+          'u.st-u-5000@auth.sarwan.tech'
+        ]
+      );
+    }
+
+    function isDesignatedInvoiceManagerEmail(email) {
+      return email != null && (
+        email in [
+          'alisarwan@gmail.com',
+          'alisarwan@auth.sarwan.tech',
+          'talashsadiq@gmail.com',
+          'sadiq@sarwan.tech',
+          'sadiq.talash@sarwan.tech',
+          'sadiqtalash@sarwan.tech',
+          'sadiqtalash@auth.sarwan.tech',
+          'sadiq.talash@auth.sarwan.tech',
+          'sadiq@auth.sarwan.tech',
+          'u.st-user-0002@auth.sarwan.tech',
+          'u.st-u-5002@auth.sarwan.tech',
+          'irshadsarwan@gmail.com',
+          'irshadsarwan@auth.sarwan.tech',
+          'u.st-user-0003@auth.sarwan.tech'
+        ] ||
+        email.lower() in [
+          'alisarwan@gmail.com',
+          'alisarwan@auth.sarwan.tech',
+          'talashsadiq@gmail.com',
+          'sadiq@sarwan.tech',
+          'sadiq.talash@sarwan.tech',
+          'sadiqtalash@sarwan.tech',
+          'sadiqtalash@auth.sarwan.tech',
+          'sadiq.talash@auth.sarwan.tech',
+          'sadiq@auth.sarwan.tech',
+          'u.st-user-0002@auth.sarwan.tech',
+          'u.st-u-5002@auth.sarwan.tech',
+          'irshadsarwan@gmail.com',
+          'irshadsarwan@auth.sarwan.tech',
+          'u.st-user-0003@auth.sarwan.tech'
+        ] ||
+        (email.lower().matches('^u\\.st-user-[0-9]{4}@auth\\.sarwan\\.tech$') && !isDesignatedAdminEmail(email)) ||
+        (email.lower().matches('^u\\.st-u-[0-9]{4}@auth\\.sarwan\\.tech$') && !isDesignatedAdminEmail(email))
+      );
+    }
+
+    function getUserRole() {
+      return request.auth != null && 'role' in request.auth.token
+        ? request.auth.token.role
+        : (request.auth != null && isDesignatedAdminEmail(request.auth.token.email)
+            ? 'super_admin'
+            : (request.auth != null && isDesignatedInvoiceManagerEmail(request.auth.token.email)
+                ? 'invoice_manager'
+                : (getUserData() != null && 'role' in getUserData() ? getUserData().role : '')));
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        isSystemService() ||
+        isDesignatedAdminEmail(request.auth.token.email) ||
+        getUserRole() == 'super_admin'
+      );
+    }
+
+    function isInvoiceManager() {
+      return isAuthenticated() && (
+        isDesignatedInvoiceManagerEmail(request.auth.token.email) ||
+        getUserRole() == 'invoice_manager'
+      );
+    }
+
+    // Explicit check to detect and deny discontinued collector accounts
+    function isPaymentCollector() {
+      return isAuthenticated() && (
+        getUserRole() == 'payment_collector' ||
+        (getUserData() != null && 'role' in getUserData() && getUserData().role == 'payment_collector')
+      );
+    }
+
+    // Explicit check to detect and deny discontinued customer accounts
+    function isCustomer() {
+      return isAuthenticated() && (
+        getUserRole() == 'customer' ||
+        (request.auth.token.email != null && request.auth.token.email.matches('.*@customer\\.sarwan\\.tech.*')) ||
+        (getUserData() != null && (
+          ('role' in getUserData() && getUserData().role == 'customer') ||
+          ('customerId' in getUserData() && getUserData().customerId != null && getUserData().customerId != '')
+        ))
+      );
+    }
+
+    // Active staff authorization: strictly super_admin and invoice_manager
+    function isStaff() {
+      return isAuthenticated() && !isCustomer() && !isPaymentCollector() && (
+        isSystemService() ||
+        isSuperAdmin() ||
+        isInvoiceManager()
+      );
+    }
+
+    // ================= 1. USERS COLLECTION =================
+    // Protects credentials and employee data. Customers cannot read users directory.
+    // Self-read is permitted for authenticated staff reading their own record.
+    // Client SDK cannot assign itself roles or alter official User IDs.
+    match /users/{userId} {
+      allow read: if isStaff() || (
+        isAuthenticated()
+        && (request.auth.uid == userId || (resource != null && 'authUid' in resource.data && resource.data.authUid == request.auth.uid))
+        && !isCustomer()
+      );
+      allow create: if isSystemService() || isSuperAdmin();
+      allow update: if (isSystemService() || isSuperAdmin()) || (
+        isAuthenticated()
+        && (request.auth.uid == userId || (resource != null && 'authUid' in resource.data && resource.data.authUid == request.auth.uid))
+        && !isCustomer()
+        && !isPaymentCollector()
+        && (!('role' in incoming()) || incoming().role == existing().role)
+        && (!('userId' in incoming()) || incoming().userId == existing().userId)
+        && (!('status' in incoming()) || incoming().status == existing().status)
+        && (!('permissions' in incoming()) || incoming().permissions == existing().permissions)
+        && (!('isCanonicalUidProfile' in incoming()) || incoming().isCanonicalUidProfile == existing().isCanonicalUidProfile)
+      );
+      allow delete: if isSystemService() || isSuperAdmin();
+
+      // Employee documents subcollection
+      match /{allSubpaths=**} {
+        allow read: if isSuperAdmin() || isInvoiceManager() || (
+          isAuthenticated()
+          && (request.auth.uid == userId || (resource != null && 'authUid' in resource.data && resource.data.authUid == request.auth.uid))
+          && !isCustomer()
+        ) || isSystemService();
+        allow write: if isSuperAdmin() || isSystemService();
+      }
+    }
+
+    // ================= 2. CUSTOMERS COLLECTION =================
+    // Customer master records are strictly internal staff data.
+    // Customer identities are blocked from reading, creating, updating, or deleting customer records.
+    match /customers/{customerId} {
+      allow read: if isStaff() || isSystemService();
+
+      // Staff (super_admin and invoice_manager) can create new customers (cannot be Blocked initially)
+      allow create: if (isSuperAdmin() || isInvoiceManager() || isSystemService())
+        && isValidId(customerId)
+        && isValidCustomer(incoming())
+        && incoming().status != 'Blocked'
+        && incoming().status != 'blocked';
+
+      // Updates cannot alter immutable customerCode or id
+      allow update: if (isSuperAdmin() || isInvoiceManager() || isSystemService())
+        && isValidId(customerId)
+        && isValidCustomer(incoming())
+        && (!('customerCode' in existing()) || !('customerCode' in incoming()) || incoming().customerCode == existing().customerCode)
+        && (!('id' in existing()) || !('id' in incoming()) || incoming().id == existing().id);
+
+      // Safe deletion restricted to Super Admin
+      allow delete: if (isSuperAdmin() || isSystemService()) && isValidId(customerId);
+    }
+
+    function isValidCustomer(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.customerType in ['Individual', 'Business']
+        && (data.customerType != 'Business' || (data.companyName is string && data.companyName.size() > 0))
+        && data.phone is string && data.phone.size() >= 6 && data.phone.size() <= 35
+        && (!('email' in data) || data.email is string)
+        && (!('address' in data) || data.address is string)
+        && (!('city' in data) || data.city is string)
+        && (!('province' in data) || data.province is string)
+        && data.status in ['Active', 'Inactive', 'Blocked', 'active', 'deactivated', 'archived'];
+    }
+
+    // ================= 3. INVOICES COLLECTION =================
+    // Commercial invoices with line items, purchase costs, and financial balances.
+    // Protected from customer access. Managed exclusively by authorized staff.
+    match /invoices/{invoiceId} {
+      allow read: if isStaff() || isSystemService();
+      allow create: if (isSuperAdmin() || isInvoiceManager() || isSystemService())
+        && isValidId(invoiceId)
+        && isValidInvoice(incoming());
+      allow update: if (isSuperAdmin() || isInvoiceManager() || isSystemService())
+        && isValidId(invoiceId)
+        && isValidInvoice(incoming())
+        && incoming().billNumber == existing().billNumber
+        && incoming().customerId == existing().customerId;
+      // Cannot delete fully paid invoices; restricted to Super Admin
+      allow delete: if (isSuperAdmin() || isSystemService()) && isValidId(invoiceId) && existing().status != 'Paid';
+    }
+
+    function isValidInvoice(data) {
+      return data.billNumber is string && data.billNumber.size() > 0 && data.billNumber.size() <= 50
+        && data.customerId is string && data.customerId.size() > 0
+        && data.totalAmount is number && data.totalAmount >= 0
+        && data.date is string && data.date.size() > 0
+        && data.status in ['Unpaid', 'Partially Paid', 'Paid', 'Void'];
+    }
+
+    // ================= 4. PAYMENTS COLLECTION =================
+    // Financial payment transactions. Customers cannot record or read payments directly.
+    match /payments/{paymentId} {
+      allow read: if isStaff() || isSystemService();
+      allow create: if (isSuperAdmin() || isInvoiceManager() || isPaymentCollector() || isSystemService())
+        && isValidId(paymentId)
+        && isValidPayment(incoming());
+      // Payments are immutable records: direct client deletion is strictly forbidden
+      // Updates are restricted to server-mediated transactions (e.g. reversal) preserving amount & billNumber
+      allow update: if (isSuperAdmin() || isSystemService())
+        && isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().amount == existing().amount
+        && incoming().billNumber == existing().billNumber;
+      allow delete: if false;
+    }
+
+    function isValidPayment(data) {
+      return data.amount is number && data.amount > 0
+        && data.billNumber is string && data.billNumber.size() > 0
+        && data.method is string
+        && data.date is string;
+    }
+
+    // ================= 5. EXPENSES COLLECTION =================
+    match /expenses/{expenseId} {
+      // 1. Read: Staff only. Collectors can ONLY read their own expense requests (strict collector privacy)
+      allow read: if isStaff() && (
+        isSuperAdmin() ||
+        isInvoiceManager() ||
+        (isPaymentCollector() && (
+          resource.data.requestedBy == request.auth.uid ||
+          (getUserData() != null && (
+            resource.data.requestedBy == getUserData().userId ||
+            resource.data.requestedBy == getUserData().id
+          ))
+        )) ||
+        isSystemService()
+      );
+
+      // 2. Create: Authorized staff (super_admin, invoice_manager, payment_collector) can record expenses directly
+      allow create: if (isSystemService() || (isStaff() && !isCustomer()))
+        && isValidId(expenseId)
+        && isValidExpense(incoming())
+        && (
+          isSystemService() ||
+          incoming().requestedByRole in ['super_admin', 'invoice_manager', 'payment_collector']
+        )
+        && (
+          isSystemService() ||
+          !('role' in request.auth.token) ||
+          request.auth.token.role in ['super_admin', 'invoice_manager', 'payment_collector']
+        )
+        && incoming().status in ['approved', 'executed', 'draft', 'pending_manager', 'pending_admin'];
+
+      // 3. Update: Authorized staff can update expense details without approval locks
+      allow update: if (isSystemService() || (isStaff() && !isCustomer()))
+        && isValidId(expenseId)
+        && isValidExpense(incoming())
+        && (!('id' in existing()) || !('id' in incoming()) || incoming().id == existing().id)
+        && (!('createdAt' in existing()) || !('createdAt' in incoming()) || incoming().createdAt == existing().createdAt)
+        && (!('requestedBy' in existing()) || !('requestedBy' in incoming()) || incoming().requestedBy == existing().requestedBy)
+        && (!('requestedByRole' in existing()) || !('requestedByRole' in incoming()) || incoming().requestedByRole == existing().requestedByRole)
+        && (!('invoiceId' in existing()) || !('invoiceId' in incoming()) || incoming().invoiceId == existing().invoiceId)
+        && (!('billNumber' in existing()) || !('billNumber' in incoming()) || incoming().billNumber == existing().billNumber);
+
+      // 4. Delete: Restricted to Super Admin and Invoice Manager.
+      allow delete: if (isSystemService() || (isStaff() && (isSuperAdmin() || isInvoiceManager())))
+        && isValidId(expenseId);
+    }
+
+    function isValidExpense(data) {
+      return data.amount is number && data.amount > 0
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 500
+        && data.date is string && data.date.size() > 0
+        && (!('category' in data) || data.category is string)
+        && (!('note' in data) || data.note is string)
+        && (!('status' in data) || data.status in ['draft', 'pending_manager', 'pending_admin', 'approved', 'executed', 'rejected'])
+        && (!('requestedBy' in data) || data.requestedBy is string)
+        && (!('invoiceId' in data) || (data.invoiceId is string && data.invoiceId.size() <= 128))
+        && (!('billNumber' in data) || (data.billNumber is string && data.billNumber.size() <= 100));
+    }
+
+    // ================= 6. SETTINGS COLLECTION =================
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if (isSuperAdmin() || isSystemService()) && isValidId(settingId);
+    }
+
+    // ================= 7. AUDIT LOGS =================
+    // Immutable security & financial audit trail.
+    // Read restricted to Super Admin; creation restricted to staff operations.
+    // Deletion permitted for authorized Super Admin and trusted system service backend.
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin() || isSystemService();
+      allow create: if (isStaff() || isSystemService()) && isValidId(logId)
+        && incoming().action is string && incoming().action.size() > 0
+        && incoming().userId is string
+        && incoming().dateTime is string;
+      allow update: if false;
+      allow delete: if (isSuperAdmin() || isSystemService()) && isValidId(logId);
+    }
+
+    // ================= 7B. AUDIT DELETION ACCOUNTABILITY LOGS =================
+    // Protected immutable channel recording all audit deletion operations.
+    // Permanent retention: updates and deletions are strictly forbidden for all roles.
+    match /auditDeletionLogs/{deletionId} {
+      allow read: if isSuperAdmin() || isSystemService();
+      allow create: if (isSuperAdmin() || isSystemService()) && isValidId(deletionId)
+        && incoming().scope in ['single', 'selected', 'all']
+        && incoming().initiatedBy is string
+        && incoming().timestamp is string;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ================= 8. NOTIFICATIONS =================
+    // Internal system notifications for staff operations.
+    function isValidNotification(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.message is string && data.message.size() > 0 && data.message.size() <= 3000
+        && data.createdAt is string
+        && (!('target' in data) || data.target is string)
+        && (!('userId' in data) || data.userId is string)
+        && (!('recipientId' in data) || data.recipientId is string)
+        && (!('deletedBy' in data) || data.deletedBy is list)
+        && (!('isRead' in data) || data.isRead is bool);
+    }
+
+    match /notifications/{notificationId} {
+      // 1. Read: Staff or System Service
+      allow read: if isStaff() || isSystemService();
+
+      // 2. Create: Authorized Staff or System Service
+      allow create: if (isStaff() || isSystemService()) && isValidId(notificationId)
+        && isValidNotification(incoming());
+
+      // 3. Update: Strict validation
+      // Allows:
+      // a) System Service or Super Admin
+      // b) Staff marking as read (isRead) or appending their own auth UID to deletedBy
+      // Core content fields (title, message, createdAt, target, userId, recipientId) cannot be altered
+      allow update: if isValidId(notificationId) && (
+        isSystemService() ||
+        (
+          isStaff() && request.auth.uid != null &&
+          isValidNotification(incoming()) &&
+          incoming().title == existing().title &&
+          incoming().message == existing().message &&
+          incoming().createdAt == existing().createdAt &&
+          (!('target' in existing()) || incoming().target == existing().target) &&
+          (!('userId' in existing()) || incoming().userId == existing().userId) &&
+          (!('recipientId' in existing()) || incoming().recipientId == existing().recipientId) &&
+          (!('deletedBy' in incoming()) || (
+            request.auth.uid in incoming().deletedBy &&
+            (!('deletedBy' in existing()) || incoming().deletedBy.hasAll(existing().deletedBy))
+          ))
+        )
+      );
+
+      // 4. Delete: Strictly restricted
+      // A user may delete a notification only when its recipient/owner identifier matches their authenticated account.
+      // Shared or system-wide notifications (target in ['staff', 'all', 'super_admin', 'invoice_manager'])
+      // CANNOT be globally deleted by individual users (must use per-user deletedBy via update).
+      // System Service retains administrative maintenance deletion rights.
+      allow delete: if isValidId(notificationId) && (
+        isSystemService() || (
+          isStaff() && request.auth.uid != null &&
+          existing().target != 'staff' &&
+          existing().target != 'all' &&
+          existing().target != 'super_admin' &&
+          existing().target != 'invoice_manager' &&
+          (
+            existing().userId == request.auth.uid ||
+            existing().recipientId == request.auth.uid ||
+            existing().target == request.auth.uid ||
+            (getUserData() != null && (
+              ('userId' in existing() && (existing().userId == getUserData().userId || existing().userId == getUserData().id)) ||
+              ('recipientId' in existing() && (existing().recipientId == getUserData().userId || existing().recipientId == getUserData().id)) ||
+              ('target' in existing() && (existing().target == getUserData().userId || existing().target == getUserData().id))
+            ))
+          )
+        )
+      );
+    }
+
+    // ================= 9. REGISTRATIONS & RETIRED COLLECTIONS =================
+    // Customer requests and Projects showcase features permanently retired; direct access disabled.
+    match /requests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /projects/{projectId} {
+      allow read, write: if false;
+    }
+
+    match /registrations/{regId} {
+      allow read, write: if isSuperAdmin() || isSystemService();
+    }
+
+    // ================= 10. SERVICES, POSTS, PRODUCTS =================
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow write: if (isSuperAdmin() || isInvoiceManager() || isSystemService()) && isValidId(postId);
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if (isSuperAdmin() || isInvoiceManager() || isSystemService()) && isValidId(serviceId);
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if (isSuperAdmin() || isInvoiceManager() || isSystemService()) && isValidId(productId);
+    }
+
+    // ================= 11. SYSTEM SECURITY =================
+    match /system_security/{docId} {
+      allow read, write: if (isSuperAdmin() || isSystemService()) && isValidId(docId);
+    }
+
+    // ================= 12. TEST CONNECTION =================
+    match /test/{docId} {
+      allow read, write: if (isStaff() || isSystemService()) && isValidId(docId);
+    }
+
+    // ================= 13. SYSTEM COUNTERS =================
+    // Atomic auto-incrementing counters (e.g., customerIdCounter, userIdCounter)
+    match /systemCounters/{counterId} {
+      allow read: if isStaff() || isSystemService();
+      allow write: if (isSuperAdmin() || isInvoiceManager() || isSystemService()) && isValidId(counterId)
+        && incoming().currentNumber is number
+        && incoming().nextNumber is number
+        && incoming().nextNumber >= incoming().currentNumber;
+    }
+
+    // ================= 14. INVOICE COSTS & PROFIT (PHASE 1) =================
+    // Strictly restricted to Super Admin and Invoice Manager
+    match /invoiceCosts/{costId} {
+      allow read, write: if (isSuperAdmin() || isInvoiceManager() || isSystemService()) && isValidId(costId);
+    }
+
+    // ================= 15. PROFIT REMITTANCE REQUESTS =================
+    function isValidProfitRemittanceRequest(data) {
+      return data.invoiceId is string && data.invoiceId.size() > 0 && data.invoiceId.size() <= 128
+        && data.billNumber is string && data.billNumber.size() > 0 && data.billNumber.size() <= 50
+        && data.requestedAmount is number && data.requestedAmount > 0
+        && data.currency is string && data.currency in ['AFN']
+        && data.status in ['pending', 'approved', 'rejected', 'cancelled', 'remitted']
+        && data.managerId is string && data.managerId.size() > 0
+        && data.managerName is string && data.managerName.size() > 0
+        && data.requestDate is string && data.requestDate.size() > 0
+        && (!('recipientId' in data) || (data.recipientId is string && data.recipientId.size() > 0 && data.recipientId.size() <= 128))
+        && (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() > 0 && data.recipientName.size() <= 200))
+        && (!('recipientRole' in data) || data.recipientRole in ['super_admin', 'invoice_manager']);
+    }
+
+    match /profitRemittanceRequests/{requestId} {
+      // 1. Read: Staff only (super_admin, invoice_manager) or system service
+      allow read: if isStaff() || isSystemService();
+
+      // 2. Create: Authorized Invoice Manager or Super Admin can submit pending request
+      allow create: if (isInvoiceManager() || isSuperAdmin() || isSystemService())
+        && isValidId(requestId)
+        && isValidProfitRemittanceRequest(incoming())
+        && incoming().status == 'pending';
+
+      // 3. Update: Strictly restricted to Super Admin or System Service
+      // Managers cannot independently alter or modify an approved/pending request
+      // Immutable fields must remain unchanged
+      allow update: if (isSuperAdmin() || isSystemService())
+        && isValidId(requestId)
+        && isValidProfitRemittanceRequest(incoming())
+        && incoming().invoiceId == existing().invoiceId
+        && incoming().billNumber == existing().billNumber
+        && incoming().requestedAmount == existing().requestedAmount
+        && incoming().managerId == existing().managerId;
+
+      // 4. Delete: Strictly forbidden (immutable audit trail)
+      allow delete: if false;
+    }
+
+    // ================= 16. PROFIT REMITTANCE RECEIPTS =================
+    // Immutable append-only financial ledger of actual receipts recorded by Super Admin
+    function isValidProfitRemittanceReceipt(data) {
+      return data.requestId is string && data.requestId.size() > 0 && data.requestId.size() <= 128
+        && data.invoiceId is string && data.invoiceId.size() > 0 && data.invoiceId.size() <= 128
+        && data.billNumber is string && data.billNumber.size() > 0 && data.billNumber.size() <= 50
+        && data.amount is number && data.amount > 0
+        && data.currency is string && data.currency in ['AFN']
+        && data.receiptDate is string && data.receiptDate.size() > 0
+        && data.receivedBy is string && data.receivedBy.size() > 0;
+    }
+
+    match /profitRemittanceReceipts/{receiptId} {
+      allow read: if isStaff() || isSystemService();
+      // Only Super Admin or System Service can record actual receipts
+      allow create: if (isSuperAdmin() || isSystemService())
+        && isValidId(receiptId)
+        && isValidProfitRemittanceReceipt(incoming());
+      // Append-only ledger: editing and deletion are strictly forbidden
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ================= 17. INVOICE MANAGER TARGETS =================
+    // Monthly performance and cash collection targets assigned to Invoice Managers
+    function isValidInvoiceManagerTarget(data) {
+      return data.managerId is string && data.managerId.size() > 0 && data.managerId.size() <= 128
+        && data.month is string && data.month.matches('^[0-9]{4}-[0-9]{2}$')
+        && data.targetAmount is number && data.targetAmount >= 0
+        && (!('currency' in data) || data.currency in ['AFN'])
+        && data.assignedBy is string && data.assignedBy.size() > 0;
+    }
+
+    match /invoiceManagerTargets/{targetId} {
+      // Read: Staff only (super_admin and invoice_manager) or system service
+      allow read: if isStaff() || isSystemService();
+      // Write: Strictly Super Admin or System Service. Invoice managers cannot assign or modify targets.
+      allow create, update: if (isSuperAdmin() || isSystemService())
+        && isValidId(targetId)
+        && isValidInvoiceManagerTarget(incoming());
+      allow delete: if isSuperAdmin() || isSystemService();
+    }
+
+    // ================= 18. DEFAULT DENY =================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

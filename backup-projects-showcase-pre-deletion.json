@@ -1,0 +1,21 @@
+{
+  "backupDate": "2026-10-18T08:09:36.278Z",
+  "collection": "projects",
+  "totalRecords": 1,
+  "records": [
+    {
+      "id": "qSJTkrlY53FZOLfcCexW",
+      "videoUrl": "",
+      "date": "2026-10-03",
+      "category": "CCTV Surveillance",
+      "isFeatured": true,
+      "title": "ffff",
+      "isPublished": true,
+      "description": "test",
+      "createdAt": "2026-10-03T07:45:16.940Z",
+      "images": [
+        "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80"
+      ]
+    }
+  ]
+}
